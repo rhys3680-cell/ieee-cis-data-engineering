@@ -1,0 +1,50 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# data
+data/
+
+# gcp-key
+config/gcp-key.json
+
+# 환경변수
+.env
+.env.*
+!.env.example
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+profiles.yml
+
+# Airflow
+airflow.db
+airflow.cfg
+webserver_config.py
+logs/
+standalone_admin_password.txt
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# 도구 캐시
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
