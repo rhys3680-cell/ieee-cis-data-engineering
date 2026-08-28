@@ -11,28 +11,28 @@ Python 3.12 · pandas · BigQuery · dbt · Airflow · MLflow
 
 전제: Python 3.12, [Kaggle API 토큰](https://www.kaggle.com/docs/api), GCP 서비스 계정
 
-​`bash
+​```bash
 uv sync
 cp .env.example .env          # GCP 프로젝트, 버킷 설정
 uv run kaggle competitions download -c ieee-fraud-detection -p data/raw
-​`
+​```
 
 dbt는 `google-cloud-*` 버전 충돌 때문에 격리 설치한다.
 
-​`bash
+​```bash
 uv tool install dbt-core --with dbt-bigquery
-​`
+​```
 
 ## 구조
 
-​`
+​```
 src/common/   설정, 로깅
 src/extract/  CSV 파싱, 스키마
 src/load/     GCS·BigQuery 적재
 src/ml/       피처, 학습, 추론
 dags/         Airflow DAG
 dbt/          staging · marts
-​`
+​```
 
 ## 설계 노트
 
