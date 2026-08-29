@@ -33,17 +33,6 @@ class Settings(BaseSettings):
     bq_dataset_staging: str = "ieee_staging"
     bq_dataset_mart: str = "ieee_mart"
 
-    # --- 파티션 기준일 ---
-    # TransactionDT는 이 시각으로부터의 초 오프셋으로 해석한다.
-    #
-    # 대회는 "timedelta from a given reference datetime"이라고만 밝혔고
-    # 기준 시점은 공개하지 않았다.
-    #
-    # 절대 날짜에는 의미가 없다. 날짜 타입을 쓰는 이유는 BigQuery 파티셔닝,
-    # Airflow catchup, dbt 날짜 함수를 그대로 쓰기 위해서다.
-    # 상대 순서와 일 단위 경계만 보존되면 목적을 달성한다.
-    transaction_dt_origin: str = "2017-12-01"
-
     log_level: str = "INFO"
 
     @field_validator("data_raw_dir", "data_processed_dir")

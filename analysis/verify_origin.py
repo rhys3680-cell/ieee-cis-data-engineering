@@ -1,6 +1,6 @@
 """TransactionDT 기준일 검증 (일회성 조사 스크립트).
 
-파이프라인에 포함되지 않는다. config.transaction_dt_origin 을 임의값으로
+파이프라인에 포함되지 않는다. schema.TRANSACTION_DT_ORIGIN 을 임의값으로
 둔 근거를 남기기 위해 보관한다.
 
 대회는 기준 시점을 공개하지 않았다. 미국 소비 데이터라면 공휴일에 거래량이

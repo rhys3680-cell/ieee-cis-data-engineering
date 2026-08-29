@@ -13,23 +13,19 @@ import pandas as pd
 from src.common.config import get_settings
 from src.common.logging import get_logger
 from src.extract.loader import raw_path
+from src.extract.schema import SECONDS_PER_DAY, to_transaction_date
 
 logger = get_logger(__name__)
-
-SECONDS_PER_DAY = 86_400
 
 
 def profile_transactions() -> pd.DataFrame:
     """거래 데이터의 시간축 분포를 집계한다."""
-    settings = get_settings()
-
     # 시간축 분석에 필요한 것만 읽는다.
     cols = ["TransactionID", "TransactionDT", "TransactionAmt", "isFraud"]
     df = pd.read_csv(raw_path("train_transaction"), usecols=cols)
 
-    origin = pd.Timestamp(settings.transaction_dt_origin)
-    df["ts"] = origin + pd.to_timedelta(df["TransactionDT"], unit="s")
-    df["dt"] = df["ts"].dt.date
+    # 날짜 변환은 schema 가 정한 기준일을 그대로 쓴다.
+    df["dt"] = to_transaction_date(df["TransactionDT"])
 
     logger.info("전체 %d 건", len(df))
     logger.info(
