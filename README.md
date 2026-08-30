@@ -87,6 +87,25 @@ Kaggle CSV  →  GCS                    BigQuery
 | staging | 표준화 | `SELECT * EXCEPT` |
 | mart | 소비처와의 계약 | 명시 |
 
+### 마트
+
+| 테이블 | 입자 | 행 |
+| --- | --- | --- |
+| `fct_transactions` | 거래 한 건 | 1,097,231 |
+| `agg_transactions_daily` | 날짜 × 시각 × split × 제품 × 기기 | 61,685 |
+| `agg_pipeline_daily` | 날짜 × split | 365 |
+
+## 대시보드
+
+[거래 현황](https://datastudio.google.com/reporting/b8b98f79-97c6-4447-91f7-59f285d9f162) — Looker Studio
+
+집계 마트를 읽는다. 거래량·사기율 추이, 시간대 패턴, 제품·기기별 비교.
+
+`fraud_rate` 를 그대로 평균하면 그룹 가중치가 무시된다.
+`SUM(fraud_count) / SUM(labeled_count)` 로 계산해야 한다.
+test 구간은 라벨이 없어 사기율이 NULL 이므로 `source_split` 필터의
+기본값을 train 으로 둔다.
+
 ## 설계 노트
 
 ### 시간축
@@ -123,7 +142,8 @@ test 구간은 `is_fraud` 가 NULL 이다. 실무에서도 최근 거래는 조�
 
 - [x] 적재 — CSV → GCS → BigQuery, 파티션 단위 멱등
 - [x] staging — 이름·타입 표준화, 소스 테스트
-- [ ] mart — 팩트, 집계
+- [x] mart — 거래 팩트, 집계 (테스트 24개)
+- [x] 대시보드 — 거래 현황 (Looker Studio)
 - [ ] Airflow — DAG, 백필
 - [ ] ML — 피처 레이어, 시간 분할 학습, MLflow
-- [ ] 대시보드 — 거래 현황, 손실, 데이터 품질
+- [ ] 모델 운영 — 배치 추론, 성능 모니터링, 손실 비용
