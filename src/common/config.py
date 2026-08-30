@@ -29,9 +29,9 @@ class Settings(BaseSettings):
     gcp_location: str = "asia-northeast3"
     gcs_bucket: str = ""
 
+    # raw만 둔다. staging/mart 데이터셋 이름은 관례에 따라 dbt가 정한다
+    # (profiles.yml의 dataset + dbt_project.yml의 +schema).
     bq_dataset_raw: str = "ieee_raw"
-    bq_dataset_staging: str = "ieee_staging"
-    bq_dataset_mart: str = "ieee_mart"
 
     log_level: str = "INFO"
 

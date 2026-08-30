@@ -24,6 +24,7 @@ config/gcp-key.json
 dbt/target/
 dbt/dbt_packages/
 dbt/logs/
+dbt/.user.yml
 profiles.yml
 
 # Airflow

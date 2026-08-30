@@ -1,0 +1,23 @@
+name: ieee_cis
+version: 1.0.0
+
+profile: ieee_cis
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  ieee_cis:
+    staging:
+      # 원본을 표준화만 한 계층이라 뷰로 둔다. 저장 비용이 없고
+      # 원본이 바뀌면 자동으로 바뀐다.
+      +materialized: view
+      +schema: staging
+    marts:
+      # 조인과 집계가 들어가 매번 계산하면 비용이 발생한다. 테이블로 만든다.
+      +materialized: table
+      +schema: mart
