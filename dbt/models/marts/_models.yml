@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: fct_transactions
+    description: >
+      거래 팩트. transaction 에 identity 를 LEFT JOIN 했다.
+      한 행이 거래 한 건이며, 익명 컬럼(V*, C*, D*, M*)은 올리지 않는다.
+    tests:
+      # identity 는 1:1 이므로 조인해도 행이 늘면 안 된다.
+      # 늘어난다면 소스에 중복이 생긴 것이다.
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_transactions')
+
+    columns:
+      - name: transaction_id
+        description: 거래 식별자
+        tests:
+          - unique
+          - not_null
+
+      - name: transaction_date
+        description: 파티션 키. 기준일이 임의값이라 절대 날짜에 의미는 없다.
+        tests:
+          - not_null
+
+      - name: transaction_hour
+        description: >
+          하루 중 시각(0~23). 패턴 비교에만 쓴다.
+          거래가 적은 시각(7~9)에 사기율이 평균의 3배로 나타난다.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 23
+
+      - name: transaction_amt
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+
+      - name: source_split
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["train", "test"]
+
+      - name: has_identity
+        description: identity 조인 성공 여부. 전체의 약 26% 다.
+        tests:
+          - not_null
+
+      - name: is_fraud
+        description: >
+          사기 여부. test 구간은 조사 중이라 NULL 이다.
+          실무에서도 최근 거래는 라벨이 비어 있으므로 정상 상태로 다룬다.
