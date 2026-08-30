@@ -26,6 +26,7 @@ package = false
 # from src.common... 임포트가 된다.
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["bq: BigQuery 를 실제로 조회한다. 느리다."]
 
 [dependency-groups]
 dev = [
