@@ -17,7 +17,7 @@ source_split 으로 구분한다. 사이에 공백이 있어 파티션이 없는
     gs://<bucket>/identity/dt=2017-12-02/part.parquet
 
 실행:
-    uv run python -m src.extract.ingest
+    uv run python -m src.extract.bootstrap
 """
 
 import pandas as pd

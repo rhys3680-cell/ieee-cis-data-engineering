@@ -41,7 +41,7 @@ bq --location=asia-northeast3 mk --dataset <프로젝트-ID>:ieee_raw
 ### 3. 적재
 
 ```bash
-uv run python -m src.extract.ingest      # CSV → GCS (365 × 2 파티션)
+uv run python -m src.extract.bootstrap      # CSV → GCS (365 × 2 파티션)
 uv run python -m src.load.bigquery       # GCS → BigQuery
 uv run python -m src.load.bigquery --describe
 ```

@@ -7,9 +7,15 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     # 컨테이너 안에서 프로젝트 코드를 임포트할 수 있게 한다.
-    PYTHONPATH: /opt/project
+    # /opt/project 는 src 임포트용, dags 는 DAG 끼리 공유하는 모듈(assets)용.
+    # Airflow 3 은 dags 디렉터리를 자동으로 sys.path 에 넣지 않는다.
+    PYTHONPATH: /opt/project:/opt/airflow/dags
     # ADC. 호스트의 gcloud 자격증명을 마운트해 쓴다.
+    # 두 이름이 모두 필요하다. GOOGLE_CLOUD_PROJECT 는 google 클라이언트
+    # 라이브러리가 기본 프로젝트로 읽고, GCP_PROJECT_ID 는 src.common.config 가
+    # pydantic-settings 로 읽는다. 컨테이너에는 .env 파일이 없다.
     GOOGLE_CLOUD_PROJECT: ${GCP_PROJECT_ID}
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     GCS_BUCKET: ${GCS_BUCKET}
     BQ_DATASET_RAW: ${BQ_DATASET_RAW:-ieee_raw}
     # SimpleAuthManager 는 비밀번호를 자동 생성해 로그에 찍는다. 컨테이너를

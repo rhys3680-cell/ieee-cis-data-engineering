@@ -108,3 +108,12 @@ def list_partitions(dataset: str) -> list[date]:
         token = blob.name.split("/")[1]
         out.append(date.fromisoformat(token.removeprefix("dt=")))
     return sorted(out)
+
+
+def blob_exists(dataset: str, dt: date) -> bool:
+    """파티션이 GCS에 있는지 확인한다.
+
+    train/test 사이 30일 공백 때문에 없는 날짜가 정상적으로 존재한다.
+    DAG가 로드를 시도하기 전에 이것으로 걸러 skip 한다.
+    """
+    return _bucket().blob(blob_path(dataset, dt)).exists()
