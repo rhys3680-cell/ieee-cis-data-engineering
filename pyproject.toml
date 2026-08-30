@@ -21,6 +21,12 @@ dependencies = [
 [tool.uv]
 package = false
 
+[tool.pytest.ini_options]
+# package = false 라 src 가 설치되지 않는다. 루트를 경로에 넣어야
+# from src.common... 임포트가 된다.
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",

@@ -149,3 +149,41 @@ def to_transaction_date(dt_seconds: pd.Series) -> pd.Series:
     """TransactionDT(초 오프셋)를 파티션 키가 될 날짜로 바꾼다."""
     origin = pd.Timestamp(TRANSACTION_DT_ORIGIN)
     return (origin + pd.to_timedelta(dt_seconds, unit="s")).dt.date
+
+
+# pandas dtype -> BigQuery 타입.
+# BigQuery에는 32비트 타입이 없어
+# Int32/float32는 모두 64비트로 올라간다.
+_BQ_TYPES = {
+    "Int32": "INT64",
+    "Int64": "INT64",
+    "float32": "FLOAT64",
+    "float64": "FLOAT64",
+    "boolean": "BOOL",
+    "category": "STRING",
+    "str": "STRING",
+}
+
+
+def bigquery_schema(dataset: str) -> list[tuple[str, str]]:
+    """BigQuery 테이블 스키마. (컬럼명, 타입) 목록.
+
+    원본 컬럼에 파이프라인이 붙이는 세 개를 더한다.
+      transaction_date  파티션 키
+      source_split      train/test 구분
+      ingested_at       적재 시각
+    """
+    if dataset == "transactions":
+        dtypes = transaction_dtypes(with_label=True)
+    elif dataset == "identity":
+        dtypes = identity_dtypes()
+    else:
+        raise KeyError(f"알 수 없는 데이터셋: {dataset!r}")
+
+    fields = [(col, _BQ_TYPES[dt]) for col, dt in dtypes.items()]
+    fields += [
+        ("transaction_date", "DATE"),
+        ("source_split", "STRING"),
+        ("ingested_at", "TIMESTAMP"),
+    ]
+    return fields
