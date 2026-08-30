@@ -108,3 +108,16 @@ models:
         description: >
           직전 7일 평균 대비 건수 비율. 1 에서 크게 벗어나면 이상이다.
           첫 7일은 기준선이 없어 NULL 이다.
+
+  - name: dim_split
+    description: ML 학습용 날짜 분할. 시간 순서로 자른다.
+    columns:
+      - name: transaction_date
+        description: 날짜 하나당 행 하나.
+        tests: [unique, not_null]
+      - name: ml_split
+        description: train / valid / test.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["train", "valid", "test"]

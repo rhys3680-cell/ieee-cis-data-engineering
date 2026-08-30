@@ -21,3 +21,6 @@ models:
       # 조인과 집계가 들어가 매번 계산하면 비용이 발생한다. 테이블로 만든다.
       +materialized: table
       +schema: mart
+
+vars:
+  valid_start: "2018-05-04"
