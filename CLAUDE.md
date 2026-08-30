@@ -77,12 +77,15 @@ gcloud auth application-default login
 | | 대상 | 언제 |
 | --- | --- | --- |
 | `gcs._check_schema` | 컬럼 집합 | 업로드 전 |
-| dbt tests (24개) | 데이터 | `dbt test` |
-| pytest | 코드 계약 | 커밋 시 |
+| dbt tests (29개) | 데이터 | `dbt test` |
+| pytest (8개) | 코드 계약 | 커밋 시 |
 
 테스트는 구현이 아니라 계약을 본다. 해시 방식이나 임시 파일 이름 같은
 세부는 바뀔 수 있으므로 검증 대상이 아니다. "무엇이 조용히 잘못될 수
 있는가"에서 출발해 거기에만 붙인다.
+
+`bq` 마커가 붙은 pytest 는 BigQuery 를 실제로 조회해 느리다(79초).
+`-m "not bq"` 로 뺄 수 있다.
 
 dbt 의 `relationships` 와 `equal_rowcount` 가 조인 무결성을 고정한다.
 identity 는 1:1 이므로 LEFT JOIN 해도 행이 늘면 안 된다.
@@ -116,5 +119,42 @@ identity 는 1:1 이므로 LEFT JOIN 해도 행이 늘면 안 된다.
 - [x] dbt — staging, mart(팩트 + 집계 2), 테스트 24개
 - [x] 대시보드 — Looker Studio (거래 현황)
 - [x] Airflow — `ingest_daily`, `transform`, Asset 연결
-- [ ] ML — 피처 레이어(누수 통제), 시간 분할, MLflow
+- [x] 시간 분할 — `dim_split`, `dataset.load` (누수 통제)
+- [ ] 베이스라인 — 더미 / 로지스틱 / LightGBM, MLflow
 - [ ] 모델 운영 — 배치 추론, 손실 비용, Metabase
+- [ ] 웹 — 임계값 화면. FastAPI + 프론트를 Cloud Run 한 컨테이너로
+
+## 피처 레이어를 미룬 이유
+
+`feat_transactions` 를 dbt 모델로 만들지 않았다. 지금 필요한 피처가
+무엇인지 모르는 상태에서 계층부터 만들면 학습해보고 다시 고치게 된다.
+`dataset.load` 가 staging 을 직접 읽고 파생은 `features.py` 에서 한다.
+값어치가 확인된 피처만 나중에 dbt 로 승격한다.
+
+계층을 미루는 것이지 누수 통제를 미루는 것은 아니다. 집계 파생을 만들 때는
+`is_fraud` 를 쓰지 않고, 윈도우를 반드시 그 시점까지로 자른다
+(`rows between unbounded preceding and 1 preceding`).
+
+## 웹 배포
+
+임계값을 만져보는 화면을 올린다. 임계값은 통계가 아니라 비용으로 정하는
+것이라(놓친 사기 대 막은 정상 거래) 슬라이더로 손실이 어떻게 변하는지
+보이는 편이 낫다. BI 도구로는 안 되는 상호작용이라 여기만 웹으로 만든다.
+
+FastAPI 가 API 와 빌드된 정적 파일을 함께 내주고 Cloud Run 컨테이너
+하나에 올린다. 프론트를 따로 호스팅하면 도메인이 갈려 CORS 를 열어야
+하는데, 화면 하나에 치를 비용이 아니다.
+
+**추론 로직은 진입점과 분리한다.** `src/ml/predict.py` 의 `score()` 는
+DataFrame 을 받아 점수를 돌려줄 뿐 BigQuery 도 HTTP 도 모른다. 배치와
+API 가 같은 함수를 부르지 않으면 화면의 점수와 테이블의 점수가 갈리고,
+원인을 찾기 어렵다.
+
+**API 는 예측 테이블을 직접 조회하지 않는다.** 슬라이더를 움직일 때마다
+쿼리가 나가면 느리고 스캔 비용이 쌓인다. 점수 구간별 건수로 미리 집계해
+두고 API 는 그 작은 테이블만 읽는다. `agg_*` 를 만든 것과 같은 이유다.
+공개 URL 이므로 임의 SQL 을 받지 않고 파라미터를 제한한다.
+
+`api/` 는 `src/` 밖에 둔다. Cloud Run 이미지에는 `src/ml/` 과 `api/` 만
+들어가고 DAG 이나 dbt 는 필요 없다. FastAPI 는 필요해질 때 의존성에
+넣는다 — 지금 넣으면 Airflow 이미지가 같이 무거워진다.
