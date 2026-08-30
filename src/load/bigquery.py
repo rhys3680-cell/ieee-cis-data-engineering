@@ -42,8 +42,12 @@ def table_id(dataset: str, partition: date | None = None) -> str:
 def ensure_table(dataset: str) -> bigquery.Table:
     """테이블이 없으면 만든다. 있으면 그대로 돌려준다.
 
-    load_partition 이 매번 부르므로 캐시한다. 365개를 로드할 때 테이블
-    존재 확인만 365번 왕복하게 된다.
+    load_partition 이 매번 부르므로 캐시한다. load_all 로 365개를 한
+    프로세스에서 돌릴 때 테이블 존재 확인만 365번 왕복하게 된다.
+
+    Airflow 는 태스크마다 새 프로세스라 캐시가 살아남지 않는다. 파티션당
+    get_table 왕복 한 번이 그대로 남지만, 로드 잡 자체가 훨씬 비싸므로
+    문제가 되지 않는다.
 
     미리 만들어 두는 이유는 로드 경로를 하나로 통일하기 위해서다.
     테이블이 없는 상태에서는 파티션 데코레이터를 쓸 수 없어, 첫 로드만
