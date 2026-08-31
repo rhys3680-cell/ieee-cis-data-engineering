@@ -58,6 +58,39 @@ dbt run --profiles-dir .
 dbt test --profiles-dir .
 ```
 
+### 5. Airflow
+
+```bash
+docker compose up -d          # 첫 실행은 이미지 빌드로 몇 분 걸린다
+docker compose ps             # 네 서비스가 running 인지 확인
+```
+
+http://localhost:8080 · `admin` / `admin`
+
+DAG는 기본적으로 정지 상태로 만들어진다. UI 에서 `ingest_daily` 를 켜면
+2017-12-02 부터 백필이 시작되고, 끝나면 Asset 신호를 받아 `transform` 이
+dbt 를 돌린다.
+
+| 서비스                  | 역할                                  |
+| ----------------------- | ------------------------------------- |
+| `airflow-apiserver`     | UI · API (8080)                       |
+| `airflow-scheduler`     | 태스크 스케줄링                       |
+| `airflow-dag-processor` | DAG 파일 파싱 (Airflow 3 에서 분리됨) |
+| `postgres`              | 메타DB                                |
+
+`.env` 를 compose 가 그대로 읽으므로 1번에서 만든 파일이 있어야 한다.
+인증은 호스트의 `%APPDATA%\gcloud` 를 읽기 전용으로 마운트해서 쓴다 —
+컨테이너 안에서 다시 로그인할 필요가 없다.
+
+Celery 관련 구성(redis, worker, flower)은 두지 않았다. LocalExecutor 로
+충분한 규모다.
+
+```bash
+docker compose logs -f airflow-scheduler   # 로그
+docker compose down                        # 정지 (메타DB 는 남는다)
+docker compose down -v                     # 볼륨까지 삭제
+```
+
 ## 구조
 
 ```
@@ -81,19 +114,20 @@ Kaggle CSV  →  GCS                    BigQuery
                                       └ dev_mart       팩트 · 집계
 ```
 
-| 계층 | 책임 | 컬럼 처리 |
-| --- | --- | --- |
-| raw | 원본 보존 | 손대지 않음 |
-| staging | 표준화 | `SELECT * EXCEPT` |
-| mart | 소비처와의 계약 | 명시 |
+| 계층    | 책임            | 컬럼 처리         |
+| ------- | --------------- | ----------------- |
+| raw     | 원본 보존       | 손대지 않음       |
+| staging | 표준화          | `SELECT * EXCEPT` |
+| mart    | 소비처와의 계약 | 명시              |
 
 ### 마트
 
-| 테이블 | 입자 | 행 |
-| --- | --- | --- |
-| `fct_transactions` | 거래 한 건 | 1,097,231 |
-| `agg_transactions_daily` | 날짜 × 시각 × split × 제품 × 기기 | 61,685 |
-| `agg_pipeline_daily` | 날짜 × split | 365 |
+| 테이블                   | 입자                              | 행        |
+| ------------------------ | --------------------------------- | --------- |
+| `fct_transactions`       | 거래 한 건                        | 1,097,231 |
+| `agg_transactions_daily` | 날짜 × 시각 × split × 제품 × 기기 | 61,685    |
+| `agg_pipeline_daily`     | 날짜 × split                      | 365       |
+| `dim_split`              | 날짜                              | 365       |
 
 ## 대시보드
 
@@ -142,8 +176,10 @@ test 구간은 `is_fraud` 가 NULL 이다. 실무에서도 최근 거래는 조�
 
 - [x] 적재 — CSV → GCS → BigQuery, 파티션 단위 멱등
 - [x] staging — 이름·타입 표준화, 소스 테스트
-- [x] mart — 거래 팩트, 집계 (테스트 24개)
+- [x] mart — 거래 팩트, 집계 (테스트 29개)
 - [x] 대시보드 — 거래 현황 (Looker Studio)
-- [ ] Airflow — DAG, 백필
-- [ ] ML — 피처 레이어, 시간 분할 학습, MLflow
+- [x] Airflow — `ingest_daily`, `transform`, Asset 연결
+- [x] 시간 분할 — `dim_split`, `dataset.load` (누수 통제)
+- [ ] 베이스라인 — 더미 / 로지스틱 / LightGBM, MLflow
 - [ ] 모델 운영 — 배치 추론, 성능 모니터링, 손실 비용
+- [ ] 웹 — 임계값 화면 (FastAPI + Cloud Run)
