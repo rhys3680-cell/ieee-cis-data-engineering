@@ -59,6 +59,8 @@ DOMAIN_MIN_COUNT = 1000
 # 전체 평균보다 낮다.
 MISSING = "(missing)"
 
+# 명시적으로 범주로 다룰 컬럼. 문자열 컬럼은 dtype 으로 따로 잡으므로
+# 여기에는 amount_band 처럼 만들어낸 것과 이름이 확실한 것만 둔다.
 CATEGORICAL = (
     "product_cd",
     "card4",
@@ -98,7 +100,26 @@ def build(
 
     # 범주형은 category dtype 으로 넘긴다. LightGBM 이 직접 처리하므로
     # 원핫이 필요 없다 — 도메인만 59 종이라 원핫으로 펼치면 열이 급증한다.
-    for col in CATEGORICAL:
+    #
+    # 받을 수 있는 것을 명시하고 나머지를 전부 바꾼다. 문자열 dtype 을
+    # 열거하는 방식은 두 번 샜다 — 이름 목록일 때 M4 가 빠졌고, dtype 을
+    # 열거해도 pandas 3 의 str/string/object 셋을 다 적어야 했다. 어느
+    # 쪽이든 새로운 것이 들어오면 조용히 통과해 학습 직전에 LightGBM 이
+    # "pandas dtypes must be int, float or bool" 로 죽는다.
+    MODEL_READY = ["number", "bool", "boolean", "category"]
+    other = list(out.select_dtypes(exclude=MODEL_READY).columns)
+
+    unexpected = [c for c in other if str(out[c].dtype) not in ("object", "string", "str")]
+    if unexpected:
+        # 날짜 같은 것이 걸리면 category 로 바꿔 죽는 것은 막지만, 값마다
+        # 범주가 생겨 카디널리티가 커지고 순서 정보를 잃는다. 제대로 쓰려면
+        # 파생을 따로 만들어야 하므로 조용히 넘기지 않는다.
+        logger.warning(
+            "문자열이 아닌 컬럼을 범주로 바꾼다 — 파생이 필요할 수 있다: %s",
+            {c: str(out[c].dtype) for c in unexpected},
+        )
+
+    for col in [*CATEGORICAL, *other]:
         if col in out.columns:
             out[col] = out[col].astype("object").fillna(MISSING).astype("category")
 

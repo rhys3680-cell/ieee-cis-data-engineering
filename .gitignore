@@ -35,6 +35,8 @@ logs/
 standalone_admin_password.txt
 
 # MLflow
+# 트래킹 DB. 파일 백엔드는 MLflow 3 에서 유지보수 모드라 SQLite 를 쓴다.
+mlflow.db
 mlruns/
 mlartifacts/
 

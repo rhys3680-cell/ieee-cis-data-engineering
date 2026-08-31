@@ -71,6 +71,27 @@ def test_금액_구간은_경계를_왼쪽에_포함한다():
     assert out["amount_band"].tolist() == ["<25", "25-50", "25-50"]
 
 
+def test_문자열_컬럼을_남기지_않는다():
+    """LightGBM 은 str dtype 을 받으면 죽는다.
+
+    익명 컬럼에 M4 가 섞여 있었는데, 범주형을 이름 목록으로 관리하던 때는
+    거기 없어서 그대로 통과했다. 학습 직전에야 "pandas dtypes must be int,
+    float or bool" 로 드러난다. 목록이 아니라 dtype 으로 잡아야 하는 이유다.
+    """
+    df = _frame(["gmail.com", "gmail.com"])
+    df["M4"] = ["M0", "M1"]          # 목록에 없는 문자열 컬럼
+    df["V1"] = [1.0, 2.0]
+
+    out = build(df)
+
+    # LightGBM 이 받는 것은 int / float / bool / category 뿐이다. 그 밖이면
+    # 남은 것으로 본다 — pandas 3 에서 문자열은 object 가 아니라 str dtype 이라
+    # object 만 확인하면 빠져나간다.
+    ok = ("category", "boolean", "bool", "Int64", "float64", "int64")
+    left = [c for c in out.columns if str(out[c].dtype) not in ok]
+    assert left == [], f"모델이 받지 못하는 dtype 이 남았다: {left}"
+
+
 def test_원본을_바꾸지_않는다():
     """같은 DataFrame 을 두 번 넣어도 결과가 같아야 한다."""
     df = _frame(["gmail.com", "unseen.com"])
