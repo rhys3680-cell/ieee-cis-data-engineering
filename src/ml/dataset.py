@@ -67,16 +67,31 @@ def load(split: str, columns: list[str] | None = None) -> Dataset:
     # columns 는 피처를 고르는 인자다. 날짜와 라벨은 반환값에 항상 필요하므로
     # 고르는 대상이 아니고, 빠지면 조회 뒤에야 KeyError 로 드러난다.
     if columns:
-        wanted = list(dict.fromkeys([*columns, "transaction_date", "is_fraud"]))
+        # transaction_id 는 identity 조인 키라 select 목록에 없어도 필요하다.
+        wanted = list(
+            dict.fromkeys([*columns, "transaction_date", "is_fraud", "transaction_id"])
+        )
         select = ", ".join(f"t.{c}" for c in wanted)
     else:
         select = "t.*"
 
-    # 파라미터 바인딩을 쓴다.
+    # transaction_hour 는 여기서 만든다. 재료인 transaction_dt 는 train/valid
+    # 경계를 그대로 담고 있어 X 에 내보낼 수 없는데(DROP_COLUMNS), 시각은
+    # 하루 주기 위의 상대 위치라 기준일을 몰라도 쓸 수 있다. 사기율이 3배
+    # 차이나는 것을 확인했다. fct_transactions 도 같은 식을 쓴다.
+    #
+    # identity 는 1:1 LEFT JOIN 이라 행이 늘지 않는다(fct 에서 테스트로 고정).
+    # 보유 여부 자체가 신호다 — 있는 쪽 7.85%, 없는 쪽 2.09% 로 3.76배다.
     q = f"""
-        select {select}, s.ml_split
+        select
+            {select},
+            s.ml_split,
+            mod(div(t.transaction_dt, 3600), 24) as transaction_hour,
+            i.transaction_id is not null         as has_identity
         from `{s.gcp_project_id}.dev_staging.stg_transactions` t
         join `{s.gcp_project_id}.dev_mart.dim_split` s using(transaction_date)
+        left join `{s.gcp_project_id}.dev_staging.stg_identity` i
+               using(transaction_id)
         where s.ml_split = @split
     """
     job_config = bigquery.QueryJobConfig(
