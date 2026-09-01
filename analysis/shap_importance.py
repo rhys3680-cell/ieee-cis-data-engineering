@@ -57,8 +57,8 @@ import shap
 
 from src.common.logging import get_logger
 from src.ml.dataset import load_training
-from src.ml.features import build
 from src.ml.model_store import load
+from src.ml.predict import prepare
 
 logger = get_logger(__name__)
 
@@ -96,7 +96,7 @@ def family(column: str) -> str:
 def main() -> pd.Series:
     bundle = load(MODEL)
     valid = load_training("valid")
-    X = bundle.align(build(valid.X, domains=bundle.domains))
+    X = prepare(valid.X, bundle)
 
     sample = X.sample(n=min(SAMPLE_SIZE, len(X)), random_state=SEED)
     values = shap.TreeExplainer(bundle.model).shap_values(sample)

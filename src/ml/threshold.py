@@ -183,8 +183,9 @@ def main(model_name: str = "lgbm-all") -> pd.DataFrame:
     # 지연 임포트. 이 모듈의 계산 함수들은 BigQuery 를 모르는데, 모듈을
     # 임포트하는 것만으로 조회 경로가 딸려오면 테스트가 느려진다.
     from src.ml.dataset import load_training
-    from src.ml.features import FeatureSet, build
+    from src.ml.features import FeatureSet
     from src.ml.model_store import load
+    from src.ml.predict import score
     from src.ml.train import COLUMNS
 
     bundle = load(model_name)
@@ -192,8 +193,7 @@ def main(model_name: str = "lgbm-all") -> pd.DataFrame:
     columns = None if bundle.feature_set is FeatureSet.ALL else COLUMNS
     valid = load_training("valid", columns=columns)
 
-    X = bundle.align(build(valid.X, domains=bundle.domains))
-    scores = bundle.model.predict_proba(X)[:, 1]
+    scores = score(valid.X, bundle)
     amounts = valid.X["transaction_amt"]
 
     table = sensitivity(valid.y, scores, amounts, grid=GRID)
