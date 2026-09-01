@@ -91,13 +91,36 @@ docker compose down                        # 정지 (메타DB 는 남는다)
 docker compose down -v                     # 볼륨까지 삭제
 ```
 
+### 6. 학습
+
+```bash
+uv run python -m src.ml.train                # curated 피처 (9 개)
+uv run python -m src.ml.train --all-columns  # 익명 컬럼까지 (394 개)
+```
+
+세 모델을 valid 에서 비교하고 지표를 `mlflow.db` 에 남긴다. lgbm 은
+`models/*.joblib` 로 저장되어 임계값 탐색과 배치 추론이 재학습 없이 읽는다.
+
+실험 기록을 UI 로 보려면 서버를 띄운다. 프로젝트 의존성에는 트래킹
+클라이언트(`mlflow-skinny`)만 있으므로 UI 는 dbt 처럼 격리 설치한다.
+
+```bash
+uv tool install mlflow                       # 1회
+mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
+```
+
+http://localhost:5000 · 실험 이름 `ieee-cis-baseline`
+
+`mlflow` 풀 패키지를 프로젝트 의존성에 넣으면 안 된다. `pandas<3` 을
+요구하는데 프로젝트는 pandas 3 을 쓴다. dbt 와 같은 이유의 격리다.
+
 ## 구조
 
 ```
 src/common/    설정, 로깅
 src/extract/   CSV 파싱, 스키마 정의, GCS 적재
 src/load/      GCS 업로드, BigQuery 로드
-src/ml/        피처, 학습, 추론
+src/ml/        조회 · 피처 · 학습 · 모델 저장 · 임계값
 dbt/models/    staging · marts
 analysis/      일회성 조사 (파이프라인에 포함되지 않음)
 dags/          Airflow DAG
@@ -111,8 +134,21 @@ Kaggle CSV  →  GCS                    BigQuery
                part.parquet           │   ↓ dbt
                                       ├ dev_staging    이름·타입 표준화
                                       │   ↓ dbt
-                                      └ dev_mart       팩트 · 집계
+                                      └ dev_mart       팩트 · 집계 · dim_split
+                                            │
+                                            ↓  dataset.load(split)
+                                        src/ml/
+                                          features.build   파생 (학습·추론 공용)
+                                          train            더미 / 로지스틱 / LightGBM
+                                          model_store      모델 + 범주 목록 + 컬럼
+                                          threshold        비용으로 임계값 결정
+                                            │
+                                            ├→ mlflow.db   실험 기록 (SQLite)
+                                            └→ models/     추론용 번들 (joblib)
 ```
+
+적재와 변환은 Airflow 가 돌리고, 학습은 손으로 돌린다. 배치 추론이 붙으면
+(Phase 8) 예측도 DAG 으로 들어간다.
 
 | 계층    | 책임            | 컬럼 처리         |
 | ------- | --------------- | ----------------- |
@@ -128,6 +164,28 @@ Kaggle CSV  →  GCS                    BigQuery
 | `agg_transactions_daily` | 날짜 × 시각 × split × 제품 × 기기 | 61,685    |
 | `agg_pipeline_daily`     | 날짜 × split                      | 365       |
 | `dim_split`              | 날짜                              | 365       |
+
+## 베이스라인
+
+valid(2018-05-04~06-01, 82,325 행, 사기 2,868 건)에서 잰 값이다.
+
+| 모델             | 피처 | PR-AUC | ROC-AUC |
+| ---------------- | ---- | ------ | ------- |
+| dummy            | -    | 0.0348 | 0.500   |
+| logreg (curated) | 9    | 0.1426 | 0.756   |
+| lgbm (curated)   | 9    | 0.1842 | 0.786   |
+| lgbm (all)       | 394  | 0.5313 | 0.915   |
+
+더미의 PR-AUC 가 기저 사기율(0.0348)과 일치하고 ROC-AUC 가 0.500 이다.
+이론값 그대로라 평가 경로가 정상이라는 뜻이다.
+
+사기율이 3.5% 라 ROC-AUC 는 음성을 맞히는 것만으로도 오른다. 판단은
+PR-AUC 로 한다 — 바닥값이 기저 사기율과 같아 "무엇이든 배웠는가"를 바로
+읽을 수 있다.
+
+익명 컬럼을 넣으면 PR-AUC 가 2.9배가 된다. 다만 logreg 는 curated 에서만
+돌린다. 선형 모델을 두는 이유가 계수를 읽어 관계를 설명하는 것인데, 의미를
+모르는 컬럼 378 개를 넣으면 설명할 것이 없어진다.
 
 ## 대시보드
 
@@ -180,6 +238,6 @@ test 구간은 `is_fraud` 가 NULL 이다. 실무에서도 최근 거래는 조�
 - [x] 대시보드 — 거래 현황 (Looker Studio)
 - [x] Airflow — `ingest_daily`, `transform`, Asset 연결
 - [x] 시간 분할 — `dim_split`, `dataset.load` (누수 통제)
-- [ ] 베이스라인 — 더미 / 로지스틱 / LightGBM, MLflow
+- [x] 베이스라인 — 더미 / 로지스틱 / LightGBM, MLflow, 모델 저장
 - [ ] 모델 운영 — 배치 추론, 성능 모니터링, 손실 비용
 - [ ] 웹 — 임계값 화면 (FastAPI + Cloud Run)
