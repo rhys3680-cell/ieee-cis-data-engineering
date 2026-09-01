@@ -174,6 +174,39 @@ def sensitivity(
     return pd.DataFrame(rows)
 
 
+def curve(
+    y_true: pd.Series,
+    scores: np.ndarray,
+    amounts: pd.Series,
+    grid: np.ndarray = GRID,
+) -> pd.DataFrame:
+    """fp_cost 에 의존하지 않는 원자료만 낸다.
+
+    화면이 슬라이더로 fp_cost 를 바꿀 때마다 서버에 묻지 않아도 되게 하려는
+    것이다. 총비용은 missed_amount + false_alarms * fp_cost 이므로, 앞의 두
+    값만 있으면 브라우저에서 곱셈으로 끝난다. 99 행에 9 KB 라 한 번 받아두면
+    된다.
+
+    예측 테이블을 직접 조회하지 않는 이유이기도 하다 — 슬라이더를 움직일
+    때마다 쿼리가 나가면 느리고 스캔 비용이 쌓인다.
+    """
+    rows = [cost(y_true, scores, amounts, t, fp_cost=0.0) for t in grid]
+    return pd.DataFrame(
+        [
+            {
+                "threshold": r.threshold,
+                "caught": r.caught,
+                "missed": r.missed,
+                "false_alarms": r.false_alarms,
+                "missed_amount": round(r.missed_amount, 2),
+                "recall": round(r.recall, 4),
+                "precision": round(r.precision, 4),
+            }
+            for r in rows
+        ]
+    )
+
+
 def main(model_name: str = "lgbm-all") -> pd.DataFrame:
     """저장한 모델로 valid 에서 민감도 표를 낸다.
 

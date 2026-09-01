@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "alembic>=1.19.1",
+    "fastapi>=0.141.1",
     "google-cloud-bigquery>=3.44.0",
     "google-cloud-bigquery-storage>=2.41.0",
     "google-cloud-storage>=3.13.1",
@@ -22,6 +23,7 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "scikit-learn>=1.9.0",
     "sqlalchemy>=2.0.52",
+    "uvicorn>=0.52.4",
 ]
 
 [tool.uv]

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.ml.threshold import cost, pick, sensitivity, sweep
+from src.ml.threshold import cost, curve, pick, sensitivity, sweep
 
 # 사기 둘(100, 200달러), 정상 둘. 점수는 사기 쪽이 높다.
 Y = pd.Series([1, 1, 0, 0])
@@ -98,6 +98,22 @@ def test_같은_비용이면_낮은_임계값을_고른다():
     # 0.2~0.9 어디서 잘라도 결과가 같다. 가장 낮은 값이 나와야 한다.
     best = pick(y, scores, amounts, fp_cost=1.0, grid=np.array([0.2, 0.5, 0.9]))
     assert best.threshold == 0.2
+
+
+def test_curve_는_fp_cost_없이도_총비용을_복원할_수_있다():
+    """화면이 슬라이더를 움직일 때 서버에 묻지 않는 근거다.
+
+    curve 가 내주는 missed_amount 와 false_alarms 만으로
+    missed_amount + false_alarms * fp_cost 가 sweep 의 total_cost 와 같아야
+    한다. 어긋나면 화면의 숫자와 CLI 의 숫자가 갈린다.
+    """
+    grid = np.array([0.1, 0.5, 0.9])
+    raw = curve(Y, SCORES, AMOUNTS, grid=grid)
+
+    for fp_cost in (0.0, 5.0, 100.0):
+        expected = sweep(Y, SCORES, AMOUNTS, fp_cost=fp_cost, grid=grid)
+        restored = raw["missed_amount"] + raw["false_alarms"] * fp_cost
+        assert restored.tolist() == expected["total_cost"].tolist()
 
 
 def test_sweep_은_격자를_모두_돌려준다():

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>사기 탐지 임계값</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1a1a19; --muted: #6b6b68;
+    --line: #e4e4e1; --accent: #b8483a; --ok: #3d7a5a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.5rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: .875rem; margin-bottom: 2rem; }
+
+  .control { padding: 1.25rem 0; border-block: 1px solid var(--line); }
+  .control label { display: block; font-weight: 600; margin-bottom: .1rem; }
+  .control .hint { color: var(--muted); font-size: .8125rem; margin-bottom: .9rem; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .scale { display: flex; justify-content: space-between;
+           color: var(--muted); font-size: .75rem; margin-top: .2rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+           gap: 1px; background: var(--line); border: 1px solid var(--line);
+           margin: 1.75rem 0; }
+  .stat { background: var(--bg); padding: .9rem 1rem; }
+  .stat dt { color: var(--muted); font-size: .75rem; margin-bottom: .25rem; }
+  .stat dd { margin: 0; font-size: 1.35rem; font-variant-numeric: tabular-nums;
+             letter-spacing: -.02em; }
+  .stat .note { font-size: .75rem; color: var(--muted); font-variant-numeric: normal; }
+
+  figure { margin: 0 0 1.75rem; }
+  figcaption { font-size: .8125rem; color: var(--muted); margin-bottom: .5rem; }
+  svg { width: 100%; height: auto; display: block; }
+
+  footer { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+           color: var(--muted); font-size: .8125rem; }
+  footer p { margin: .4rem 0; }
+  code { background: #f0f0ed; padding: .1em .35em; border-radius: 3px; font-size: .9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>사기 탐지 임계값</h1>
+  <p class="sub" id="context">불러오는 중…</p>
+
+  <section class="control">
+    <label for="fp">정상 거래를 잘못 막았을 때의 비용</label>
+    <p class="hint">
+      재승인 처리, 고객 문의, 이탈까지 포함해 한 건에 얼마로 볼 것인가.
+      데이터에 없는 값이라 여기서 가정한다.
+    </p>
+    <input type="range" id="fp" min="1" max="100" step="1" value="5">
+    <div class="scale"><span>$1</span><span id="fpval">$5</span><span>$100</span></div>
+  </section>
+
+  <dl class="stats">
+    <div class="stat"><dt>권장 임계값</dt><dd id="th">—</dd></div>
+    <div class="stat"><dt>탐지율</dt><dd id="recall">—</dd>
+      <div class="note" id="caught"></div></div>
+    <div class="stat"><dt>정밀도</dt><dd id="prec">—</dd>
+      <div class="note" id="blocked"></div></div>
+    <div class="stat"><dt>총비용</dt><dd id="cost">—</dd>
+      <div class="note" id="saved"></div></div>
+  </dl>
+
+  <figure>
+    <figcaption>임계값별 총비용 — 최소점이 권장값이다</figcaption>
+    <svg id="chart" viewBox="0 0 720 260" role="img"
+         aria-label="임계값에 따른 총비용 곡선"></svg>
+  </figure>
+
+  <figure>
+    <figcaption>탐지율과 정밀도는 반대로 움직인다</figcaption>
+    <svg id="tradeoff" viewBox="0 0 720 200" role="img"
+         aria-label="임계값에 따른 탐지율과 정밀도"></svg>
+  </figure>
+
+  <footer>
+    <p>
+      놓친 사기는 그 거래액만큼 잃는다 — 이 값은 데이터에 있다. 막은 정상은
+      처리와 이탈 비용이 드는데 회사마다 달라 데이터에 없다. 위 슬라이더가
+      유일한 가정이고, 임계값은 그 가정을 따라 움직인다.
+    </p>
+    <p>
+      회수는 계산하지 않는다. true fraud 차지백에서 가맹점 승소율이 9% 라
+      놓친 금액을 전액 손실로 보는 편이 실제에 가깝다.
+    </p>
+    <p>데이터: IEEE-CIS Fraud Detection · 모델 <code id="model">—</code></p>
+  </footer>
+</main>
+
+<script>
+const KRW = new Intl.NumberFormat("en-US");
+const usd = n => "$" + KRW.format(Math.round(n));
+const pct = n => (n * 100).toFixed(1) + "%";
+
+let rows = [], summary = null;
+
+fetch("/api/curve")
+  .then(r => r.json())
+  .then(d => {
+    rows = d.rows; summary = d.summary;
+    document.getElementById("context").textContent =
+      `${summary.split} 구간 ${KRW.format(summary.rows)}건 중 사기 ${KRW.format(summary.frauds)}건. ` +
+      `아무것도 막지 않으면 ${usd(summary.fraud_amount)}을 잃는다.`;
+    document.getElementById("model").textContent = summary.model;
+    render();
+  })
+  .catch(() => {
+    document.getElementById("context").textContent =
+      "데이터를 불러오지 못했다. 서버가 떠 있는지 확인한다.";
+  });
+
+const fp = document.getElementById("fp");
+fp.addEventListener("input", render);
+
+// 총비용 = 놓친 사기 금액 + 막은 정상 건수 x fp_cost.
+// 원자료를 받아 두었으므로 슬라이더를 움직여도 서버에 묻지 않는다.
+const totalCost = (row, c) => row.missed_amount + row.false_alarms * c;
+
+function render() {
+  if (!rows.length) return;
+  const c = +fp.value;
+  document.getElementById("fpval").textContent = "$" + c;
+
+  const costs = rows.map(r => totalCost(r, c));
+  let bi = 0;
+  for (let i = 1; i < costs.length; i++) if (costs[i] < costs[bi]) bi = i;
+  const best = rows[bi], bestCost = costs[bi];
+
+  document.getElementById("th").textContent = best.threshold.toFixed(2);
+  document.getElementById("recall").textContent = pct(best.recall);
+  document.getElementById("caught").textContent =
+    `사기 ${KRW.format(summary.frauds)}건 중 ${KRW.format(best.caught)}건`;
+  document.getElementById("prec").textContent = pct(best.precision);
+  document.getElementById("blocked").textContent =
+    `막은 ${KRW.format(best.caught + best.false_alarms)}건 중 실제 사기`;
+  document.getElementById("cost").textContent = usd(bestCost);
+  document.getElementById("saved").textContent =
+    `막지 않을 때보다 ${usd(summary.fraud_amount - bestCost)} 적다`;
+
+  drawCost(costs, bi);
+  drawTradeoff(bi);
+}
+
+function scale(vals, lo, hi) {
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const span = mx - mn || 1;
+  return v => hi - ((v - mn) / span) * (hi - lo);
+}
+
+function drawCost(costs, bi) {
+  const svg = document.getElementById("chart");
+  const W = 720, H = 260, L = 68, R = 12, T = 14, B = 30;
+  const x = i => L + (i / (costs.length - 1)) * (W - L - R);
+  const y = scale([0, ...costs], T, H - B);
+
+  const line = costs.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const mx = Math.max(...costs);
+
+  svg.innerHTML = `
+    <line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="var(--line)"/>
+    <line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="var(--line)"/>
+    <text x="${L - 8}" y="${y(mx) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${usd(mx)}</text>
+    <text x="${L - 8}" y="${H - B + 4}" text-anchor="end" font-size="11" fill="var(--muted)">$0</text>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <line x1="${x(bi)}" y1="${T}" x2="${x(bi)}" y2="${H - B}" stroke="var(--ok)" stroke-dasharray="3 3"/>
+    <circle cx="${x(bi)}" cy="${y(costs[bi])}" r="4" fill="var(--ok)"/>
+    <text x="${L}" y="${H - 8}" font-size="11" fill="var(--muted)">임계값 0.01</text>
+    <text x="${W - R}" y="${H - 8}" text-anchor="end" font-size="11" fill="var(--muted)">0.99</text>`;
+}
+
+function drawTradeoff(bi) {
+  const svg = document.getElementById("tradeoff");
+  const W = 720, H = 200, L = 68, R = 12, T = 14, B = 30;
+  const x = i => L + (i / (rows.length - 1)) * (W - L - R);
+  const y = v => (H - B) - v * (H - B - T);
+
+  const path = key => rows
+    .map((r, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(r[key]).toFixed(1)}`).join("");
+
+  svg.innerHTML = `
+    <line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="var(--line)"/>
+    <line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="var(--line)"/>
+    <text x="${L - 8}" y="${y(1) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">100%</text>
+    <text x="${L - 8}" y="${H - B + 4}" text-anchor="end" font-size="11" fill="var(--muted)">0%</text>
+    <path d="${path("recall")}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <path d="${path("precision")}" fill="none" stroke="var(--ok)" stroke-width="2"/>
+    <line x1="${x(bi)}" y1="${T}" x2="${x(bi)}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="3 3"/>
+    <text x="${W - R}" y="${T + 12}" text-anchor="end" font-size="11" fill="var(--accent)">탐지율</text>
+    <text x="${W - R}" y="${T + 28}" text-anchor="end" font-size="11" fill="var(--ok)">정밀도</text>`;
+}
+</script>
+</body>
+</html>
