@@ -17,11 +17,27 @@
 않고, 공휴일로 기준일을 역산하려던 시도도 실패했다(analysis/verify_origin.py).
 """
 
+from enum import StrEnum
+
 import pandas as pd
 
 from src.common.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class FeatureSet(StrEnum):
+    """학습에 쓸 피처의 범위.
+
+    문자열로 두면 "curated" 를 세 군데(학습 진입점, Baseline 정의, 저장한
+    번들)에 적게 되고, 오타가 나도 runs_on 이 False 를 돌려줄 뿐이라 모델이
+    조용히 빠진다. StrEnum 이라 파일명이나 MLflow 로깅에는 문자열처럼 쓴다.
+    """
+
+    # 판별력을 확인한 것만. 무엇이 기여하는지 설명할 수 있다.
+    CURATED = "curated"
+    # 익명 컬럼(V*, C*, D*, M*)까지. 설명은 어렵지만 PR-AUC 가 2.9배가 된다.
+    ALL = "all"
 
 # 금액 구간. 사기율이 U 자를 그린다 — 소액 6.97%, 중간 2.87%, 고액 4.72%.
 #

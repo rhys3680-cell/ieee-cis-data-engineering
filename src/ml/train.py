@@ -36,8 +36,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from src.common.logging import get_logger
+from src.ml import model_store
 from src.ml.dataset import load_training
-from src.ml.features import build, fit_domains
+from src.ml.features import FeatureSet, build, fit_domains
 
 logger = get_logger(__name__)
 
@@ -129,9 +130,14 @@ class Baseline:
     name: str
     factory: Callable[[], object]
     # 이 모델을 돌릴 피처 집합. 비어 있지 않아야 한다.
-    feature_sets: frozenset[str] = field(default_factory=lambda: frozenset({"curated"}))
+    feature_sets: frozenset[FeatureSet] = field(
+        default_factory=lambda: frozenset({FeatureSet.CURATED})
+    )
+    # 파일로 저장할지. 눈금자 역할인 dummy 와 logreg 는 저장하지 않는다 —
+    # 배포 후보가 아니라 lgbm 을 해석하기 위한 비교 대상이다.
+    persist: bool = False
 
-    def runs_on(self, tag: str) -> bool:
+    def runs_on(self, tag: FeatureSet) -> bool:
         return tag in self.feature_sets
 
 
@@ -149,10 +155,15 @@ BASELINES = (
     Baseline(
         name="dummy",
         factory=lambda: DummyClassifier(strategy="prior"),
-        feature_sets=frozenset({"curated", "all"}),
+        feature_sets=frozenset({FeatureSet.CURATED, FeatureSet.ALL}),
     ),
     Baseline(name="logreg", factory=_logreg),
-    Baseline(name="lgbm", factory=_lgbm, feature_sets=frozenset({"curated", "all"})),
+    Baseline(
+        name="lgbm",
+        factory=_lgbm,
+        feature_sets=frozenset({FeatureSet.CURATED, FeatureSet.ALL}),
+        persist=True,
+    ),
 )
 
 
@@ -172,7 +183,7 @@ def main(all_columns: bool = False) -> dict[str, dict[str, float]]:
     dbt를 통해 추가로 등록할지 결정하기 위해 작성했다.
     """
     columns = None if all_columns else COLUMNS
-    tag = "all" if all_columns else "curated"
+    tag = FeatureSet.ALL if all_columns else FeatureSet.CURATED
 
     train = load_training("train", columns=columns)
     valid = load_training("valid", columns=columns)
@@ -220,6 +231,21 @@ def main(all_columns: bool = False) -> dict[str, dict[str, float]]:
                 metrics["pr_auc"],
                 metrics["roc_auc"],
             )
+
+            if spec.persist:
+                # 임계값 탐색과 배치 추론이 이 파일을 읽는다. 저장하지
+                # 않으면 임계값을 잴 때마다 2분씩 재학습하게 된다.
+                model_store.save(
+                    model_store.Bundle(
+                        model=model,
+                        domains=domains,
+                        columns=list(X_train.columns),
+                        feature_set=tag,
+                        metrics=metrics,
+                        trained_at=model_store.now(),
+                    ),
+                    name=f"{name}-{tag}",
+                )
 
     baseline = float(valid.y.mean())
     logger.info("기저 사기율 %.4f — PR-AUC 가 이 값을 넘어야 배운 것이다.", baseline)
