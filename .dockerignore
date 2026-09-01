@@ -1,0 +1,36 @@
+# 이미지에 들어가는 것은 api/ 뿐이다. Cloud Build 는 여기 없는 것을 전부
+# 업로드하므로, data/ 1.4GB 를 막지 않으면 빌드마다 그것을 올린다.
+
+# 데이터와 산출물
+data/
+models/
+mlruns/
+mlflow.db
+logs/
+
+# 이미지가 쓰지 않는 코드
+src/
+dags/
+dbt/
+analysis/
+tests/
+docker/
+
+# 파이썬
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 개발 환경
+.git/
+.github/
+.vscode/
+.idea/
+.env
+*.md
+docker-compose.yml
+uv.lock
+pyproject.toml
