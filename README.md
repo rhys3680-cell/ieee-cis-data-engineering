@@ -20,7 +20,13 @@ Kaggle CSV  →  GCS                    BigQuery
                                           features    파생 (학습·추론 공용)
                                           train       더미 / 로지스틱 / LightGBM
                                           model_store 모델 + 범주 목록 + 컬럼
+                                          predict     배치·API 공용 진입점
                                           threshold   비용으로 임계값 결정
+                                            │
+                                            ↓  build_data (배포 전 1회)
+                                        api/static/curve.json
+                                            │
+                                        Cloud Run  임계값 화면
 ```
 
 적재와 변환은 Airflow 가 돌리고 학습은 손으로 돌린다.
@@ -103,6 +109,46 @@ uv tool install mlflow                       # UI 도 격리 설치
 mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 ```
 
+### 6. 임계값 화면
+
+[threshold-ui.run.app](https://threshold-ui-59694923737.asia-northeast3.run.app)
+— 비용 가정을 슬라이더로 바꿔가며 임계값이 어떻게 움직이는지 본다.
+
+```bash
+uv run python -m api.build_data              # 곡선을 JSON 으로 굽는다
+uv run uvicorn api.main:app --reload         # localhost:8000
+```
+
+**서버가 모델을 들고 있지 않다.** 임계값 곡선은 재학습해야 바뀌는 값이라
+요청마다 계산할 이유가 없다. `build_data` 가 99행 12 KB 를 굽고 API 는 그것을
+정적 파일로 내준다. 그래서 컨테이너에 모델도 BigQuery 클라이언트도 lightgbm 도
+필요 없어 211 MB 에 그치고, 콜드 스타트가 1초 미만이다.
+
+슬라이더도 서버에 묻지 않는다. 곡선이 `fp_cost` 에 의존하지 않는 원자료라
+총비용은 화면이 `missed_amount + false_alarms * fp_cost` 로 계산한다.
+
+**배포**
+
+```bash
+docker build -t threshold-ui .
+gcloud auth configure-docker asia-northeast3-docker.pkg.dev
+docker tag threshold-ui asia-northeast3-docker.pkg.dev/<프로젝트-ID>/web/threshold-ui
+docker push asia-northeast3-docker.pkg.dev/<프로젝트-ID>/web/threshold-ui
+
+gcloud run deploy threshold-ui \
+  --image asia-northeast3-docker.pkg.dev/<프로젝트-ID>/web/threshold-ui \
+  --region asia-northeast3 --allow-unauthenticated --min-instances 0
+```
+
+Cloud Build 대신 로컬에서 빌드해 푸시한다. 새 프로젝트에서는 Compute 기본
+서비스 계정에 역할이 붙지 않아 `gcloud builds submit` 이 자기 소스 tarball
+조차 읽지 못한다(`storage.objects.get denied`). 화면 하나를 올리는 데
+IAM 역할 셋을 붙이는 것보다 로컬 빌드가 간단하다 — 자동 빌드가 필요해지면
+그때 정리한다.
+
+모델을 재학습하면 `build_data` 를 다시 돌리고 배포한다. 자동으로 갱신되지
+않는 편이 오히려 안전하다 — 화면의 숫자가 바뀌는 시점이 명시적이다.
+
 ## 결과
 
 valid(2018-05-04~06-01, 82,325행, 사기 2,868건)에서 잰 값이다.
@@ -161,5 +207,6 @@ valid(2018-05-04~06-01, 82,325행, 사기 2,868건)에서 잰 값이다.
 - [x] 시간 분할 — `dim_split`, `dataset.load` (누수 통제)
 - [x] 베이스라인 — 더미 / 로지스틱 / LightGBM, MLflow, 모델 저장
 - [x] 임계값 — 비용 기반 결정, 민감도 분석
+- [x] 웹 — 임계값 화면 (FastAPI + Cloud Run)
 - [ ] 배치 추론 — `predict_daily`, 예측 테이블, 모니터링
-- [ ] 웹 — 임계값 화면 (FastAPI + Cloud Run)
+- [ ] 운영 화면 — 일별 추이 (`/ops` 탭)
