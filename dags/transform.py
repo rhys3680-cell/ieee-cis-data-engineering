@@ -7,7 +7,7 @@ dbt 는 별도 venv 에 있다. dbt-bigquery 가 google-cloud-bigquery <3.3.3 �
 """
 
 from airflow.sdk import dag, task
-from assets import RAW_LOADED
+from assets import MART_READY, RAW_LOADED
 
 DBT = "/opt/dbt-venv/bin/dbt"
 DBT_DIR = "/opt/project/dbt"
@@ -29,7 +29,9 @@ def transform():
     def dbt_run() -> str:
         return f"cd {DBT_DIR} && {DBT} run {DBT_FLAGS}"
 
-    @task.bash
+    # 테스트까지 통과해야 mart 가 신뢰할 수 있다. dbt_run 에 신호를 달면
+    # 데이터가 깨진 채로 채점이 시작된다.
+    @task.bash(outlets=[MART_READY])
     def dbt_test() -> str:
         return f"cd {DBT_DIR} && {DBT} test {DBT_FLAGS}"
 

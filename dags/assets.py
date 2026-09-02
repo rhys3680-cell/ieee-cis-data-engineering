@@ -10,3 +10,7 @@ from airflow.sdk import Asset
 # ieee_raw 의 파티션이 갱신되었다는 신호. ingest_daily 가 생산하고
 # transform 이 소비한다.
 RAW_LOADED = Asset("bq://ieee_raw")
+
+# mart 가 갱신되었다는 신호. transform 이 생산하고 predict_daily 가 소비한다.
+# 적재가 아니라 변환까지 끝나야 채점할 수 있어 신호를 따로 둔다.
+MART_READY = Asset("bq://dev_mart")

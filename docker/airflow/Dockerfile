@@ -15,6 +15,8 @@ USER airflow
 RUN pip install --no-cache-dir \
         apache-airflow-providers-google \
         pandas \
-        pyarrow
+        pyarrow \
+        lightgbm \
+        scikit-learn
 
 ENV DBT_BIN=/opt/dbt-venv/bin/dbt
