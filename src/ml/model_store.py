@@ -121,6 +121,67 @@ def load(name: str, directory: Path = MODEL_DIR) -> Bundle:
     return bundle
 
 
+def gcs_blob_path(name: str) -> str:
+    """GCS 안에서의 경로. 버전을 붙이지 않는다.
+
+    이름 하나에 최신 모델 하나를 둔다. 타임스탬프를 붙이면 어느 것이
+    운영에 쓰이는지 관리할 대상이 생기는데, 지금은 재학습이 드물고
+    되돌릴 일이 생기면 train 을 다시 돌리는 편이 빠르다.
+    """
+    return f"models/{name}.joblib"
+
+
+def upload(name: str, directory: Path = MODEL_DIR) -> str:
+    """로컬에 저장한 번들을 GCS 로 올린다. gs:// URI 를 돌려준다.
+
+    Airflow 나 Cloud Run 이 읽으려면 컨테이너 밖에 있어야 한다. 이미지에
+    구우면 모델을 바꿀 때마다 이미지를 다시 빌드하고 배포해야 한다.
+    """
+    from src.load.gcs import _bucket
+
+    path = directory / f"{name}.joblib"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} 가 없다. train 을 먼저 돌려야 한다.")
+
+    blob = _bucket().blob(gcs_blob_path(name))
+    blob.upload_from_filename(path)
+
+    uri = f"gs://{blob.bucket.name}/{blob.name}"
+    logger.info("모델 업로드: %s (%.1f MB)", uri, path.stat().st_size / 1024**2)
+    return uri
+
+
+def load_from_gcs(name: str, cache_dir: Path = MODEL_DIR) -> Bundle:
+    """GCS 의 번들을 읽는다. 받은 파일은 로컬에 두고 다음에 재사용한다.
+
+    Airflow 는 태스크마다 새 프로세스라 매번 내려받게 되는데, 컨테이너가
+    살아 있는 동안은 파일이 남으므로 백필 365 회가 365 번 내려받지는 않는다.
+    """
+    from src.load.gcs import _bucket
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path = cache_dir / f"{name}.joblib"
+
+    blob = _bucket().blob(gcs_blob_path(name))
+    if not blob.exists():
+        raise FileNotFoundError(
+            f"gs://{blob.bucket.name}/{blob.name} 가 없다. upload 를 먼저 해야 한다."
+        )
+
+    # 로컬 파일이 GCS 것과 같으면 내려받지 않는다. 크기만 비교하는 것은
+    # 같은 이름으로 다른 모델을 올렸을 때 놓치므로 세대(generation)를 본다.
+    marker = cache_dir / f"{name}.generation"
+    blob.reload()
+    remote = str(blob.generation)
+
+    if not (path.exists() and marker.exists() and marker.read_text() == remote):
+        blob.download_to_filename(path)
+        marker.write_text(remote)
+        logger.info("모델 내려받음: %s", path.name)
+
+    return load(name, directory=cache_dir)
+
+
 def now() -> datetime:
     """학습 시각. 어느 시점 데이터로 만든 모델인지 남긴다.
 
