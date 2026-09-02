@@ -34,6 +34,20 @@ sources:
                   arguments:
                     values: ["train", "test"]
 
+      - name: predictions
+        description: >
+          배치 추론이 남긴 사기 점수. src/ml/batch.py 가 하루치씩 쓴다.
+          판정이 아니라 점수만 있다 — 임계값은 비용 가정에 따라 움직이므로
+          소비처가 적용한다.
+        columns:
+          - name: transaction_id
+            tests: [unique, not_null]
+          - name: score
+            tests: [not_null]
+          - name: model
+            description: 어느 모델이 매긴 점수인지. 분포가 바뀌었을 때 원인을 가른다.
+            tests: [not_null]
+
       - name: identity
         description: 기기·네트워크 정보. 전체 거래의 약 25%에만 존재한다.
         columns:

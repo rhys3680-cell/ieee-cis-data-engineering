@@ -121,3 +121,36 @@ models:
           - not_null
           - accepted_values:
               values: ["train", "valid", "test"]
+
+  - name: agg_predictions_daily
+    description: >
+      배치 추론 상태. 라벨이 없어 정확도를 잴 수 없으므로 '평소와 같은가'를
+      본다. 차단율과 점수 분포가 갑자기 움직이면 모델이나 데이터에 문제가
+      생긴 것이다.
+    columns:
+      - name: transaction_date
+        description: 날짜와 모델 조합이 유일하다.
+        tests: [not_null]
+      - name: model
+        description: 모델을 바꾸면 행이 나뉜다. 분포 변화의 원인을 가른다.
+        tests: [not_null]
+      - name: scored_count
+        tests: [not_null]
+      - name: blocked_rate
+        description: 기준 임계값(block_threshold) 이상인 비율.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: score_p99
+        description: 상위 1% 점수. 분포가 통째로 밀리면 여기서 먼저 드러난다.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: blocked_rate_vs_baseline
+        description: >
+          직전 7일 평균 대비 차단율 비율. 첫 7일은 기준선이 없어 NULL 이다.
