@@ -154,3 +154,67 @@ models:
       - name: blocked_rate_vs_baseline
         description: >
           직전 7일 평균 대비 차단율 비율. 첫 7일은 기준선이 없어 NULL 이다.
+
+  - name: agg_score_amount
+    description: >
+      점수 x 금액 사분면. 임계값 하나로 자를 때 무엇이 빠져나가는지 본다.
+      점수 낮음 x 금액 높음 칸이 이 모델을 만든 이유다 — 건수는 적지만
+      금액 합계가 가장 크다.
+    columns:
+      - name: transaction_date
+        tests: [not_null]
+      - name: score_band
+        description: 기준 임계값(block_threshold) 기준.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["high", "low"]
+      - name: amount_band
+        description: 고액 경계(high_amount) 기준.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["high", "low"]
+      - name: tx_count
+        tests: [not_null]
+      - name: amount_total
+        tests: [not_null]
+
+  - name: agg_feature_buckets
+    description: >
+      SHAP 상위 피처의 값 구간별 사기율. 익명 컬럼은 이름으로 설명할 수
+      없으므로 어떤 값에서 사기율이 튀는지 보여준다. 분위수로 자르는 대신
+      극단값은 agg_feature_values 가 낸다.
+    columns:
+      - name: feature
+        tests: [not_null]
+      - name: bucket
+        description: Q1~Q5 또는 null. 결측을 분리해 분위수를 매긴다.
+        tests: [not_null]
+      - name: fraud_rate
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: tx_count
+        description: min_bucket_rows 미만인 구간은 빠진다.
+        tests: [not_null]
+
+  - name: agg_feature_values
+    description: >
+      SHAP 상위 피처의 최빈값별 사기율. 분위수가 뭉개는 극단 신호를 잡는다 —
+      C13 은 0 일 때 14.1% 로 평균의 4배인데 Q1 에 섞이면 6.4% 가 된다.
+    columns:
+      - name: feature
+        tests: [not_null]
+      - name: value
+        tests: [not_null]
+      - name: fraud_rate
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
