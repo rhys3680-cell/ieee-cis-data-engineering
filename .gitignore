@@ -36,7 +36,8 @@ standalone_admin_password.txt
 
 # 학습한 모델. 재현은 train.py 로 하고 파일은 두지 않는다.
 # 배치 추론이 필요해지면 GCS 로 옮긴다.
-models/
+# 앞의 슬래시가 없으면 dbt/models/ 까지 잡는다. 루트의 것만 무시한다.
+/models/
 
 # MLflow
 # 트래킹 DB. 파일 백엔드는 MLflow 3 에서 유지보수 모드라 SQLite 를 쓴다.
