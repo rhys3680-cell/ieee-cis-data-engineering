@@ -13,7 +13,7 @@ Kaggle CSV  →  GCS                    BigQuery
                part.parquet           │   ↓ dbt
                                       ├ dev_staging    이름·타입 표준화
                                       │   ↓ dbt
-                                      └ dev_mart       팩트 · 집계 · dim_split
+                                      └ dev_mart       팩트 · 집계 · 분할 · 예측
                                             │
                                             ↓  dataset.load(split)
                                         src/ml/
@@ -37,8 +37,11 @@ Kaggle CSV  →  GCS                    BigQuery
 | staging | 표준화 | `SELECT * EXCEPT` |
 | mart | 소비처와의 계약 | 명시 |
 
-마트는 `fct_transactions`(1,097,231행), `agg_transactions_daily`(61,685행),
-`agg_pipeline_daily`(365행), `dim_split`(365행) 넷이다.
+마트는 일곱이다. 거래 쪽은 `fct_transactions`(1,097,231행),
+`agg_transactions_daily`(61,685행), `agg_pipeline_daily`(365행),
+`dim_split`(365행). 모델 쪽은 `agg_predictions_daily`(일별 차단율과 점수
+분포), `agg_score_amount`(점수 × 금액 사분면), `agg_feature_buckets` ·
+`agg_feature_values`(SHAP 상위 피처의 값별 사기율)다.
 
 ## 시작하기
 
@@ -146,8 +149,34 @@ Cloud Build 대신 로컬에서 빌드해 푸시한다. 새 프로젝트에서�
 IAM 역할 셋을 붙이는 것보다 로컬 빌드가 간단하다 — 자동 빌드가 필요해지면
 그때 정리한다.
 
-모델을 재학습하면 `build_data` 를 다시 돌리고 배포한다. 자동으로 갱신되지
-않는 편이 오히려 안전하다 — 화면의 숫자가 바뀌는 시점이 명시적이다.
+### 7. 모델을 다시 학습했을 때
+
+파생 산출물이 자동으로 따라오지 않는다. 순서대로 돌려야 화면과 테이블이
+같은 모델을 말한다.
+
+```bash
+uv run python -m src.ml.train --all-columns   # 1. 학습 → models/*.joblib
+uv run python -m src.ml.model_store lgbm-all  # 2. GCS 로 올린다
+
+# 3. 예측을 다시 만든다. Airflow 에서 predict_daily 를 재실행하거나,
+#    로컬이면 날짜별로 src.ml.batch 를 돌린다.
+uv run python -m src.ml.batch 2018-07-02
+
+cd dbt && dbt run --profiles-dir .            # 4. 예측을 읽는 마트 갱신
+cd .. && uv run python -m api.build_data      # 5. 곡선을 다시 굽는다
+docker build -t threshold-ui . && docker push ...   # 6. 재배포
+```
+
+**빠뜨리면 어긋난다.** 2번 없이 3번을 돌리면 옛 모델로 채점하고, 5번을
+빠뜨리면 화면만 옛 곡선을 보여준다. 그러면 임계값 화면과 사분면 마트가
+서로 다른 모델을 말하게 되는데, 에러가 나지 않아 눈치채기 어렵다.
+
+`predictions` 테이블에 `model_trained_at` 을 남겨 두었으므로 어느 모델이
+매긴 점수인지는 확인할 수 있다. 자동 감지는 아직 없다 — 재학습이 드물어
+절차를 지키는 편이 단순하다.
+
+자동으로 갱신되지 않는 것이 나쁜 것만은 아니다. 화면의 숫자가 바뀌는
+시점이 명시적이고, 재학습 결과가 나쁘면 배포하지 않으면 된다.
 
 ## 결과
 
@@ -201,7 +230,7 @@ valid(2018-05-04~06-01, 82,325행, 사기 2,868건)에서 잰 값이다.
 ## 진행 상황
 
 - [x] 적재 — CSV → GCS → BigQuery, 파티션 단위 멱등
-- [x] dbt — staging, mart 4개, 테스트 29개
+- [x] dbt — staging, mart 7개, 테스트 55개
 - [x] 대시보드 — 거래 현황 ([Looker Studio](https://datastudio.google.com/reporting/b8b98f79-97c6-4447-91f7-59f285d9f162))
 - [x] Airflow — `ingest_daily`, `transform`, Asset 연결
 - [x] 시간 분할 — `dim_split`, `dataset.load` (누수 통제)

@@ -189,3 +189,12 @@ def now() -> datetime:
     비교할 수 없다.
     """
     return datetime.now(UTC)
+
+
+if __name__ == "__main__":
+    # 학습한 모델을 GCS 로 올린다. Airflow 와 배치 추론이 거기서 읽는다.
+    #
+    #     uv run python -m src.ml.model_store lgbm-all
+    import sys
+
+    upload(sys.argv[1] if len(sys.argv) > 1 else "lgbm-all")
